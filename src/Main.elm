@@ -209,11 +209,6 @@ view model =
     }
 
 
-paragraph : String -> Html msg
-paragraph s =
-    Html.p [] [ Html.text s ]
-
-
 viewQuiz : { a | quiz : Quiz, quizState : QuizState } -> Html Msg
 viewQuiz model =
     case model.quizState.current of
@@ -330,7 +325,7 @@ viewQuiz model =
             in
             Html.div
                 [ Attributes.class "quiz-question" ]
-                [ paragraph current.question.description
+                [ Html.paragraph current.question.description
                 , Html.div
                     [ Attributes.class "answers" ]
                     [ answers ]
