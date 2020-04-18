@@ -8,6 +8,8 @@ import Helpers.Return as Return
 import Html exposing (Html, div, text)
 import Html.Attributes as Attributes
 import Html.Events as Events
+import List.Extra as List
+import Picnic
 import Url
 
 
@@ -50,6 +52,7 @@ type alias Question =
     { description : String
     , correct : Answer
     , alternates : List Answer
+    , solution : Maybe String
     }
 
 
@@ -69,6 +72,7 @@ type Msg
     | UrlChanged Url.Url
     | Answer String
     | NextQuestion
+    | TryAgain
 
 
 firstQuiz : Quiz
@@ -78,10 +82,12 @@ firstQuiz =
         [ { description = "Who won the 2019 Australian Grand Prix"
           , correct = "Bottas"
           , alternates = [ "Hamilton", "Verstappen", "Vettel" ]
+          , solution = Nothing
           }
         , { description = "Who won the 2019 Bahrain Grand Prix"
           , correct = "Hamilton"
           , alternates = [ "Bottas", "Leclerc", "Verstappen" ]
+          , solution = Just "Leclerc looked set for a maiden victory only for his Ferrari to suffer a mechanical error."
           }
         ]
     }
@@ -190,6 +196,10 @@ update msg model =
             { model | quizState = newQuizState }
                 |> Return.noCommand
 
+        TryAgain ->
+            { model | quizState = startQuiz model.quiz }
+                |> Return.noCommand
+
 
 view : Model -> Browser.Document Msg
 view model =
@@ -208,7 +218,30 @@ viewQuiz : { a | quiz : Quiz, quizState : QuizState } -> Html Msg
 viewQuiz model =
     case model.quizState.current of
         Nothing ->
-            Html.text "You are at the end of the quiz"
+            let
+                correct doneQuestion =
+                    doneQuestion.answer == doneQuestion.question.correct
+            in
+            Picnic.card
+                [ Html.header
+                    []
+                    [ Html.text "Chequered flag" ]
+                , Html.p
+                    []
+                    [ Html.text "You scored: "
+                    , List.count correct model.quizState.done
+                        |> String.fromInt
+                        |> Html.text
+                    , Html.text " out of "
+                    , List.length model.quizState.done |> String.fromInt |> Html.text
+                    ]
+                , Html.footer
+                    []
+                    [ Html.button
+                        [ TryAgain |> Events.onClick ]
+                        [ Html.text "Try again" ]
+                    ]
+                ]
 
         Just current ->
             let
@@ -217,21 +250,21 @@ viewQuiz model =
                         correctClass =
                             case current.answered of
                                 Nothing ->
-                                    "possible"
+                                    Attributes.class "possible"
 
                                 Just answered ->
                                     case ( answered == answer, answer == current.question.correct ) of
                                         ( True, True ) ->
-                                            "correct"
+                                            Picnic.success
 
                                         ( False, False ) ->
-                                            "correctly-left"
+                                            Attributes.class "correctly-left"
 
                                         ( False, True ) ->
-                                            "incorrect-left"
+                                            Attributes.class "incorrect-left"
 
                                         ( True, False ) ->
-                                            "incorrect"
+                                            Picnic.error
 
                         messageAttribute =
                             case Maybe.isSomething current.answered of
@@ -243,7 +276,7 @@ viewQuiz model =
                                     Attributes.disabled True
                     in
                     Html.button
-                        [ Attributes.class correctClass
+                        [ correctClass
                         , messageAttribute
                         ]
                         [ Html.text answer ]
@@ -252,6 +285,36 @@ viewQuiz model =
                     List.map showAnswer (current.question.correct :: current.question.alternates)
                         |> List.map (\a -> Html.li [] [ a ])
                         |> Html.ul []
+
+                solution =
+                    let
+                        explanation =
+                            Html.div
+                                [ Attributes.class "solution" ]
+                                [ current.question.solution
+                                    |> Maybe.withDefault current.question.correct
+                                    |> Html.text
+                                ]
+                    in
+                    case current.answered of
+                        Nothing ->
+                            Html.nothing
+
+                        Just answered ->
+                            Html.div
+                                [ Attributes.class "solution-container" ]
+                                [ case answered == current.question.correct of
+                                    True ->
+                                        div
+                                            [ Picnic.success ]
+                                            [ Html.text "Correct" ]
+
+                                    False ->
+                                        div
+                                            [ Picnic.error ]
+                                            [ Html.text "Incorrect" ]
+                                , explanation
+                                ]
 
                 next =
                     case current.answered of
@@ -271,5 +334,6 @@ viewQuiz model =
                 , Html.div
                     [ Attributes.class "answers" ]
                     [ answers ]
+                , solution
                 , next
                 ]
