@@ -4,6 +4,8 @@ import Browser
 import Browser.Dom
 import Browser.Events
 import Browser.Navigation as Nav
+import Helpers.Html as Html
+import Helpers.Return as Return
 import Html exposing (Html, div, text)
 import Html.Attributes as Attributes
 import Html.Events as Events
@@ -112,7 +114,7 @@ init () url key =
             , quizState = startQuiz firstQuiz
             }
     in
-    noCommand initialModel
+    Return.noCommand initialModel
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -128,16 +130,16 @@ update msg model =
                         Browser.External href ->
                             Nav.load href
             in
-            withCommand command model
+            Return.withCommand command model
 
         UrlChanged url ->
-            noCommand { model | url = url }
+            Return.noCommand { model | url = url }
 
         Answer answer ->
             case model.quizState.current of
                 Nothing ->
                     -- Strange, bit of an error
-                    noCommand model
+                    Return.noCommand model
 
                 Just current ->
                     let
@@ -151,7 +153,7 @@ update msg model =
                             { quizState | current = Just newCurrent }
                     in
                     { model | quizState = newQuizState }
-                        |> noCommand
+                        |> Return.noCommand
 
         NextQuestion ->
             let
@@ -187,22 +189,7 @@ update msg model =
                             }
             in
             { model | quizState = newQuizState }
-                |> noCommand
-
-
-withCommand : Cmd msg -> model -> ( model, Cmd msg )
-withCommand command model =
-    ( model, command )
-
-
-withCommands : List (Cmd msg) -> model -> ( model, Cmd msg )
-withCommands commands model =
-    ( model, Cmd.batch commands )
-
-
-noCommand : model -> ( model, Cmd msg )
-noCommand model =
-    ( model, Cmd.none )
+                |> Return.noCommand
 
 
 view : Model -> Browser.Document Msg
@@ -270,7 +257,7 @@ viewQuiz model =
                 next =
                     case current.answered of
                         Nothing ->
-                            nothing
+                            Html.nothing
 
                         Just _ ->
                             Html.button
@@ -287,8 +274,3 @@ viewQuiz model =
                     [ answers ]
                 , next
                 ]
-
-
-nothing : Html msg
-nothing =
-    Html.text ""
