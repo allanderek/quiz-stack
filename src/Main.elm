@@ -1,10 +1,9 @@
 module Main exposing (main)
 
 import Browser
-import Browser.Dom
-import Browser.Events
 import Browser.Navigation as Nav
 import Helpers.Html as Html
+import Helpers.Maybe as Maybe
 import Helpers.Return as Return
 import Html exposing (Html, div, text)
 import Html.Attributes as Attributes
@@ -235,12 +234,12 @@ viewQuiz model =
                                             "incorrect"
 
                         messageAttribute =
-                            case current.answered of
-                                Nothing ->
+                            case Maybe.isSomething current.answered of
+                                False ->
                                     Answer answer
                                         |> Events.onClick
 
-                                Just _ ->
+                                True ->
                                     Attributes.disabled True
                     in
                     Html.button
