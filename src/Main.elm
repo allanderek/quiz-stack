@@ -318,15 +318,16 @@ viewQuiz model =
                                 [ Attributes.class "solution-container" ]
                                 [ case answered == current.question.correct of
                                     True ->
-                                        div
+                                        Html.h3
                                             [ Picnic.success ]
                                             [ Html.text "Correct" ]
 
                                     False ->
-                                        div
+                                        Html.h3
                                             [ Picnic.error ]
                                             [ Html.text "Incorrect" ]
                                 , explanation
+                                , next
                                 ]
 
                 next =
@@ -340,6 +341,12 @@ viewQuiz model =
                                 , Events.onClick NextQuestion
                                 ]
                                 [ Html.text "Next" ]
+
+                currentQuestionNum =
+                    1 + List.length model.quizState.done
+
+                totalNumQuestions =
+                    currentQuestionNum + List.length model.quizState.tocome
             in
             Html.article
                 [ Attributes.class "quiz-question"
@@ -355,5 +362,11 @@ viewQuiz model =
                     [ Attributes.class "answers" ]
                     [ answers ]
                 , solution
-                , next
+                , Html.footer
+                    []
+                    [ Html.text "Question "
+                    , currentQuestionNum |> String.fromInt |> Html.text
+                    , Html.text " of "
+                    , totalNumQuestions |> String.fromInt |> Html.text
+                    ]
                 ]
