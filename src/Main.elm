@@ -8,8 +8,11 @@ import Helpers.Return as Return
 import Html exposing (Html, div, text)
 import Html.Attributes as Attributes
 import Html.Events as Events
+import Json.Decode as Decode
 import List.Extra as List
 import Picnic
+import Random
+import Random.List as Random
 import Url
 
 
@@ -31,12 +34,13 @@ subscriptions =
 
 
 type alias ProgramFlags =
-    ()
+    Decode.Value
 
 
 type alias Model =
     { key : Nav.Key
     , url : Url.Url
+    , seed : Random.Seed
     , quiz : Quiz
     , quizState : QuizState
     }
@@ -63,8 +67,15 @@ type alias Answer =
 
 type alias QuizState =
     { done : List { answer : Answer, question : Question }
-    , current : Maybe { question : Question, answered : Maybe String }
+    , current : Maybe CurrentQuestion
     , tocome : List Question
+    }
+
+
+type alias CurrentQuestion =
+    { question : Question
+    , order : List Answer
+    , answered : Maybe String
     }
 
 
@@ -105,7 +116,7 @@ firstQuiz =
           , solution = Just "And a fourth one-two for the Mercedes team, but this time it was Bottas who ran from pole to flag without major incident."
           }
         , { title = "Who won the 2019 Spanish Grand Prix"
-          , description = "Bottas was once again pole-sitter in Catalunya, as the Mercedes drivers appear to be doinating the early championship. Who took the chequered flag?"
+          , description = "Bottas was once again pole-sitter in Catalunya, as the Mercedes drivers appear to be dominating the early championship. Who took the chequered flag?"
           , correct = "Hamilton"
           , alternates = [ "Bottas", "Verstappen", "Vettel" ]
           , solution = Just "Hamilton took first position from his teammate into turn 1. Ferrari ordered Vettel to make way for his faster teammate Leclerc, but the two switched around again later in an attempt to salvage something better than a 4-5 finish, to no avail."
@@ -210,30 +221,63 @@ firstQuiz =
     }
 
 
-startQuiz : Quiz -> QuizState
-startQuiz quiz =
+startQuestion : Random.Seed -> Question -> ( Random.Seed, CurrentQuestion )
+startQuestion seed question =
+    let
+        generator =
+            question.correct
+                :: question.alternates
+                |> Random.shuffle
+
+        ( answers, newSeed ) =
+            Random.step generator seed
+    in
+    ( newSeed
+    , { question = question, order = answers, answered = Nothing }
+    )
+
+
+startQuiz : Random.Seed -> Quiz -> ( Random.Seed, QuizState )
+startQuiz seed quiz =
     case quiz.questions of
         [] ->
-            { done = []
-            , current = Nothing
-            , tocome = []
-            }
+            ( seed
+            , { done = []
+              , current = Nothing
+              , tocome = []
+              }
+            )
 
         first :: rest ->
-            { done = []
-            , current = Just { question = first, answered = Nothing }
-            , tocome = rest
-            }
+            let
+                ( newSeed, newCurrent ) =
+                    startQuestion seed first
+            in
+            ( newSeed
+            , { done = []
+              , current = Just newCurrent
+              , tocome = rest
+              }
+            )
 
 
 init : ProgramFlags -> Url.Url -> Nav.Key -> ( Model, Cmd Msg )
-init () url key =
+init programFlags url key =
     let
+        seed =
+            Decode.decodeValue (Decode.field "dateTimeNow" Decode.int) programFlags
+                |> Result.withDefault 12345
+                |> Random.initialSeed
+
+        ( newSeed, initialQuizState ) =
+            startQuiz seed firstQuiz
+
         initialModel =
             { key = key
             , url = url
+            , seed = newSeed
             , quiz = firstQuiz
-            , quizState = startQuiz firstQuiz
+            , quizState = initialQuizState
             }
     in
     Return.noCommand initialModel
@@ -295,26 +339,44 @@ update msg model =
                             ]
                                 |> (++) quizState.done
 
-                newQuizState =
+                ( newSeed, newQuizState ) =
                     case quizState.tocome of
                         [] ->
-                            { quizState
+                            ( model.seed
+                            , { quizState
                                 | done = newDone
                                 , current = Nothing
-                            }
+                              }
+                            )
 
                         first :: rest ->
-                            { quizState
+                            let
+                                ( updatedSeed, newCurrent ) =
+                                    startQuestion model.seed first
+                            in
+                            ( updatedSeed
+                            , { quizState
                                 | done = newDone
-                                , current = Just { question = first, answered = Nothing }
+                                , current = Just newCurrent
                                 , tocome = rest
-                            }
+                              }
+                            )
             in
-            { model | quizState = newQuizState }
+            { model
+                | quizState = newQuizState
+                , seed = newSeed
+            }
                 |> Return.noCommand
 
         TryAgain ->
-            { model | quizState = startQuiz model.quiz }
+            let
+                ( newSeed, newQuizState ) =
+                    startQuiz model.seed model.quiz
+            in
+            { model
+                | quizState = newQuizState
+                , seed = newSeed
+            }
                 |> Return.noCommand
 
 
@@ -407,7 +469,7 @@ viewQuiz model =
                         [ Html.text answer ]
 
                 answers =
-                    List.map showAnswer (current.question.correct :: current.question.alternates)
+                    List.map showAnswer current.order
                         |> List.map (\a -> Html.li [] [ a ])
                         |> Html.ul []
 
