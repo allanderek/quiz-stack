@@ -49,7 +49,8 @@ type alias Quiz =
 
 
 type alias Question =
-    { description : String
+    { title : String
+    , description : String
     , correct : Answer
     , alternates : List Answer
     , solution : Maybe String
@@ -79,12 +80,14 @@ firstQuiz : Quiz
 firstQuiz =
     { name = "2019 race winners"
     , questions =
-        [ { description = "Who won the 2019 Australian Grand Prix"
+        [ { title = "Who won the 2019 Australian Grand Prix"
+          , description = "The first race of the season, Ferrari were confident after a strong showing in pre-season testing, but did they convert that into a win at Albert park?"
           , correct = "Bottas"
           , alternates = [ "Hamilton", "Verstappen", "Vettel" ]
           , solution = Nothing
           }
-        , { description = "Who won the 2019 Bahrain Grand Prix"
+        , { title = "Who won the 2019 Bahrain Grand Prix"
+          , description = ""
           , correct = "Hamilton"
           , alternates = [ "Bottas", "Leclerc", "Verstappen" ]
           , solution = Just "Leclerc looked set for a maiden victory only for his Ferrari to suffer a mechanical error."
@@ -217,7 +220,10 @@ viewQuiz model =
                 correct doneQuestion =
                     doneQuestion.answer == doneQuestion.question.correct
             in
-            Picnic.card
+            Html.article
+                [ Attributes.class "card"
+                , Attributes.class "final-results"
+                ]
                 [ Html.header
                     []
                     [ Html.text "Chequered flag" ]
@@ -261,6 +267,14 @@ viewQuiz model =
                                         ( True, False ) ->
                                             Picnic.error
 
+                        answeredClass =
+                            case current.answered == Just answer of
+                                False ->
+                                    Attributes.class "not-selected"
+
+                                True ->
+                                    Attributes.class "selected"
+
                         messageAttribute =
                             case Maybe.isSomething current.answered of
                                 False ->
@@ -268,11 +282,13 @@ viewQuiz model =
                                         |> Events.onClick
 
                                 True ->
-                                    Attributes.disabled True
+                                    Attributes.class "not-in-use"
                     in
                     Html.button
-                        [ correctClass
+                        [ Attributes.class "answer"
+                        , correctClass
                         , messageAttribute
+                        , answeredClass
                         ]
                         [ Html.text answer ]
 
@@ -286,9 +302,11 @@ viewQuiz model =
                         explanation =
                             Html.div
                                 [ Attributes.class "solution" ]
-                                [ current.question.solution
-                                    |> Maybe.withDefault current.question.correct
-                                    |> Html.text
+                                [ Html.text "Correct answer: "
+                                , Html.text current.question.correct
+                                , current.question.solution
+                                    |> Maybe.withDefault ""
+                                    |> Html.paragraph
                                 ]
                     in
                     case current.answered of
@@ -323,9 +341,16 @@ viewQuiz model =
                                 ]
                                 [ Html.text "Next" ]
             in
-            Html.div
-                [ Attributes.class "quiz-question" ]
-                [ Html.paragraph current.question.description
+            Html.article
+                [ Attributes.class "quiz-question"
+                , Attributes.class "card"
+                ]
+                [ Html.h3
+                    [ Attributes.class "question-title" ]
+                    [ Html.text current.question.title ]
+                    |> List.singleton
+                    |> Html.header []
+                , Html.paragraph current.question.description
                 , Html.div
                     [ Attributes.class "answers" ]
                     [ answers ]

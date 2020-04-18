@@ -15,3 +15,44 @@ $oslo-gray: #888C96;
 $font-regular: "Fira Sans Regular", sans-serif;
 $font-bold: "Fira Sans Bold", sans-serif;
 
+
+button.not-in-use {
+    cursor: not-allowed;
+    opacity: 0.4;
+}
+
+button.correctly-left{
+    background-color: hsl(0, 0%, 44%);
+}
+
+button.incorrect-left{
+    background-color: hsl(117, 18%, 52%);
+}
+
+button.selected {
+    font-weight: bold;
+    color: black;
+}
+
+.quiz-question, .final-results {
+    max-width: 600px;
+    margin: 2em auto;
+
+    header{
+        text-align: center;
+    }
+    
+    .answers ul {
+        list-style: none;
+        padding: 1em;
+
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+
+        li .answer {
+            width: 100%;
+            box-sizing: border-box;
+        }
+    }
+}
