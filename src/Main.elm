@@ -2,6 +2,7 @@ module Main exposing (main)
 
 import Browser
 import Browser.Navigation as Nav
+import Dict exposing (Dict)
 import Helpers.Html as Html
 import Helpers.Maybe as Maybe
 import Helpers.Return as Return
@@ -13,6 +14,7 @@ import List.Extra as List
 import Picnic
 import Random
 import Random.List as Random
+import Route exposing (Route)
 import Url
 
 
@@ -41,23 +43,39 @@ type alias Model =
     { key : Nav.Key
     , url : Url.Url
     , seed : Random.Seed
-    , quiz : Quiz
-    , quizState : QuizState
+    , route : Route
+    , quizzes : List Quiz
+    , quizStates : Dict QuizId QuizState
     }
 
 
 type alias Quiz =
-    { name : String
-    , questions : List Question
+    QuizData { order : List Answer }
+
+
+type alias QuizData a =
+    { name : QuizName
+    , id : QuizId
+    , introduction : List String
+    , questions : List (Question a)
     }
 
 
-type alias Question =
-    { title : String
-    , description : String
-    , correct : Answer
-    , alternates : List Answer
-    , solution : Maybe String
+type alias QuizName =
+    String
+
+
+type alias QuizId =
+    String
+
+
+type alias Question a =
+    { a
+        | title : QuizName
+        , description : String
+        , correct : Answer
+        , alternates : List Answer
+        , solution : Maybe String
     }
 
 
@@ -66,30 +84,30 @@ type alias Answer =
 
 
 type alias QuizState =
-    { done : List { answer : Answer, question : Question }
-    , current : Maybe CurrentQuestion
-    , tocome : List Question
-    }
-
-
-type alias CurrentQuestion =
-    { question : Question
-    , order : List Answer
-    , answered : Maybe String
+    { current : Int
+    , answers : Dict Int Answer
     }
 
 
 type Msg
     = LinkClicked Browser.UrlRequest
     | UrlChanged Url.Url
-    | Answer String
-    | NextQuestion
-    | TryAgain
+    | StartQuiz QuizId
+    | Answer QuizId String
+    | NextQuestion QuizId
+    | GiveUp QuizId
+    | TryAgain QuizId
 
 
-firstQuiz : Quiz
+firstQuiz : QuizData {}
 firstQuiz =
     { name = "2019 race winners"
+    , id = "race-winners-2019"
+    , introduction =
+        [ "Let's see how much you remember from the 2019 season."
+        , "For each of the 21 races of the season, all you have to remember is who won the race."
+        , "Each question will feature the four drivers that finished 1-4th."
+        ]
     , questions =
         [ { title = "Who won the 2019 Australian Grand Prix"
           , description = "The first race of the season, Ferrari were confident after a strong showing in pre-season testing, but did they convert that into a win at Albert park?"
@@ -182,7 +200,7 @@ firstQuiz =
           , solution = Just "No, but Ferrari still won the race."
           }
         , { title = "Who won the 2019 Russian Grand Prix"
-          , description = "Leclerc on pole again. But did convert for a win this time on the black sea coast?"
+          , description = "Leclerc on pole again. But did he convert for a win this time on the black sea coast?"
           , correct = "Hamilton"
           , alternates = [ "Bottas", "Leclerc", "Verstappen" ]
           , solution = Just "Leclerc expected to be forced to allow Vettel to pass through but a power failure for the German couldn't help Leclerc win as the Mercedes were the fastest."
@@ -221,44 +239,40 @@ firstQuiz =
     }
 
 
-startQuestion : Random.Seed -> Question -> ( Random.Seed, CurrentQuestion )
-startQuestion seed question =
+setAnswersQuiz : Random.Seed -> QuizData a -> ( Random.Seed, Quiz )
+setAnswersQuiz initialSeed quizData =
     let
-        generator =
-            question.correct
-                :: question.alternates
-                |> Random.shuffle
+        setAnswersQuestion question ( currentSeed, questions ) =
+            let
+                generator =
+                    question.correct
+                        :: question.alternates
+                        |> Random.shuffle
 
-        ( answers, newSeed ) =
-            Random.step generator seed
+                ( answers, newCurrentSeed ) =
+                    Random.step generator currentSeed
+            in
+            ( newCurrentSeed
+            , { title = question.title
+              , description = question.description
+              , correct = question.correct
+              , alternates = question.alternates
+              , solution = question.solution
+              , order = answers
+              }
+                :: questions
+            )
+
+        ( newSeed, newQuestions ) =
+            List.foldr setAnswersQuestion ( initialSeed, [] ) quizData.questions
     in
     ( newSeed
-    , { question = question, order = answers, answered = Nothing }
+    , { name = quizData.name
+      , id = quizData.id
+      , introduction = quizData.introduction
+      , questions = newQuestions
+      }
     )
-
-
-startQuiz : Random.Seed -> Quiz -> ( Random.Seed, QuizState )
-startQuiz seed quiz =
-    case quiz.questions of
-        [] ->
-            ( seed
-            , { done = []
-              , current = Nothing
-              , tocome = []
-              }
-            )
-
-        first :: rest ->
-            let
-                ( newSeed, newCurrent ) =
-                    startQuestion seed first
-            in
-            ( newSeed
-            , { done = []
-              , current = Just newCurrent
-              , tocome = rest
-              }
-            )
 
 
 init : ProgramFlags -> Url.Url -> Nav.Key -> ( Model, Cmd Msg )
@@ -269,15 +283,16 @@ init programFlags url key =
                 |> Result.withDefault 12345
                 |> Random.initialSeed
 
-        ( newSeed, initialQuizState ) =
-            startQuiz seed firstQuiz
+        ( newSeed, firstQuizRandomised ) =
+            setAnswersQuiz seed firstQuiz
 
         initialModel =
             { key = key
             , url = url
             , seed = newSeed
-            , quiz = firstQuiz
-            , quizState = initialQuizState
+            , route = Route.parse url
+            , quizzes = [ firstQuizRandomised ]
+            , quizStates = Dict.empty
             }
     in
     Return.noCommand initialModel
@@ -285,6 +300,10 @@ init programFlags url key =
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
+    let
+        emptyQuizState =
+            { current = 0, answers = Dict.empty }
+    in
     case msg of
         LinkClicked urlRequest ->
             let
@@ -299,84 +318,58 @@ update msg model =
             Return.withCommand command model
 
         UrlChanged url ->
-            Return.noCommand { model | url = url }
-
-        Answer answer ->
-            case model.quizState.current of
-                Nothing ->
-                    -- Strange, bit of an error
-                    Return.noCommand model
-
-                Just current ->
-                    let
-                        newCurrent =
-                            { current | answered = Just answer }
-
-                        quizState =
-                            model.quizState
-
-                        newQuizState =
-                            { quizState | current = Just newCurrent }
-                    in
-                    { model | quizState = newQuizState }
-                        |> Return.noCommand
-
-        NextQuestion ->
             let
-                quizState =
-                    model.quizState
-
-                newDone =
-                    case quizState.current of
-                        Nothing ->
-                            -- Strange.
-                            quizState.done
-
-                        Just current ->
-                            [ { question = current.question
-                              , answer = current.answered |> Maybe.withDefault ""
-                              }
-                            ]
-                                |> (++) quizState.done
-
-                ( newSeed, newQuizState ) =
-                    case quizState.tocome of
-                        [] ->
-                            ( model.seed
-                            , { quizState
-                                | done = newDone
-                                , current = Nothing
-                              }
-                            )
-
-                        first :: rest ->
-                            let
-                                ( updatedSeed, newCurrent ) =
-                                    startQuestion model.seed first
-                            in
-                            ( updatedSeed
-                            , { quizState
-                                | done = newDone
-                                , current = Just newCurrent
-                                , tocome = rest
-                              }
-                            )
+                route =
+                    Route.parse url
             in
             { model
-                | quizState = newQuizState
-                , seed = newSeed
+                | url = url
+                , route = route
             }
                 |> Return.noCommand
 
-        TryAgain ->
+        StartQuiz quizId ->
+            { model | quizStates = Dict.insert quizId emptyQuizState model.quizStates }
+                |> Return.noCommand
+
+        GiveUp quizId ->
             let
-                ( newSeed, newQuizState ) =
-                    startQuiz model.seed model.quiz
+                oldQuizState =
+                    Dict.get quizId model.quizStates
+                        |> Maybe.withDefault emptyQuizState
+
+                newQuizState =
+                    { oldQuizState | current = -1 }
             in
-            { model
-                | quizState = newQuizState
-                , seed = newSeed
-            }
+            { model | quizStates = Dict.insert quizId newQuizState model.quizStates }
+                |> Return.noCommand
+
+        Answer quizId answer ->
+            let
+                oldQuizState =
+                    Dict.get quizId model.quizStates
+                        |> Maybe.withDefault emptyQuizState
+
+                newQuizState =
+                    { oldQuizState | answers = Dict.insert oldQuizState.current answer oldQuizState.answers }
+            in
+            { model | quizStates = Dict.insert quizId newQuizState model.quizStates }
+                |> Return.noCommand
+
+        NextQuestion quizId ->
+            let
+                oldQuizState =
+                    Dict.get quizId model.quizStates
+                        |> Maybe.withDefault emptyQuizState
+
+                newQuizState =
+                    { oldQuizState | current = oldQuizState.current + 1 }
+            in
+            { model | quizStates = Dict.insert quizId newQuizState model.quizStates }
+                |> Return.noCommand
+
+        TryAgain quizId ->
+            { model | quizStates = Dict.insert quizId emptyQuizState model.quizStates }
                 |> Return.noCommand
 
 
@@ -384,165 +377,258 @@ view : Model -> Browser.Document Msg
 view model =
     { title = "Title"
     , body =
-        [ viewQuiz model ]
+        case model.route of
+            Route.Home ->
+                [ viewHome model ]
+
+            Route.Quiz quizId ->
+                [ viewQuiz model quizId ]
+
+            Route.NotFound ->
+                [ Html.text "I'm sorry, I am not the page you were looking for." ]
     }
 
 
-viewQuiz : { a | quiz : Quiz, quizState : QuizState } -> Html Msg
-viewQuiz model =
-    case model.quizState.current of
+viewHome : Model -> Html Msg
+viewHome model =
+    let
+        showQuizLink quiz =
+            Html.a
+                [ Route.Quiz quiz.id
+                    |> Route.href
+                ]
+                [ quiz.name |> Html.text ]
+
+        content =
+            List.map showQuizLink model.quizzes
+                |> List.map (List.singleton >> Html.li [])
+                |> Html.ol []
+    in
+    Html.article
+        [ Attributes.class "card"
+        , Attributes.class "quiz-list"
+        ]
+        [ content ]
+
+
+viewHomeLink : Html msg
+viewHomeLink =
+    Html.a
+        [ Attributes.class "home-button"
+        , Route.Home |> Route.href
+        ]
+        [ Html.text "Home" ]
+
+
+viewQuiz : Model -> QuizId -> Html Msg
+viewQuiz model quizId =
+    case List.find (\q -> q.id == quizId) model.quizzes of
         Nothing ->
-            let
-                correct doneQuestion =
-                    doneQuestion.answer == doneQuestion.question.correct
-            in
-            Html.article
-                [ Attributes.class "card"
-                , Attributes.class "final-results"
-                ]
-                [ Html.header
-                    []
-                    [ Html.text "Chequered flag" ]
-                , Html.p
-                    []
-                    [ Html.text "You scored: "
-                    , List.count correct model.quizState.done
-                        |> String.fromInt
-                        |> Html.text
-                    , Html.text " out of "
-                    , List.length model.quizState.done |> String.fromInt |> Html.text
-                    ]
-                , Html.footer
-                    []
-                    [ Html.button
-                        [ TryAgain |> Events.onClick ]
-                        [ Html.text "Try again" ]
-                    ]
-                ]
+            Html.text "Sorry I could not find that quiz."
 
-        Just current ->
-            let
-                showAnswer answer =
-                    let
-                        correctClass =
-                            case current.answered of
-                                Nothing ->
-                                    Attributes.class "possible"
-
-                                Just answered ->
-                                    case ( answered == answer, answer == current.question.correct ) of
-                                        ( True, True ) ->
-                                            Picnic.success
-
-                                        ( False, False ) ->
-                                            Attributes.class "correctly-left"
-
-                                        ( False, True ) ->
-                                            Attributes.class "incorrect-left"
-
-                                        ( True, False ) ->
-                                            Picnic.error
-
-                        answeredClass =
-                            case current.answered == Just answer of
-                                False ->
-                                    Attributes.class "not-selected"
-
-                                True ->
-                                    Attributes.class "selected"
-
-                        messageAttribute =
-                            case Maybe.isSomething current.answered of
-                                False ->
-                                    Answer answer
-                                        |> Events.onClick
-
-                                True ->
-                                    Attributes.class "not-in-use"
-                    in
-                    Html.button
-                        [ Attributes.class "answer"
-                        , correctClass
-                        , messageAttribute
-                        , answeredClass
+        Just quiz ->
+            case Dict.get quizId model.quizStates of
+                Nothing ->
+                    Html.article
+                        [ Attributes.class "card"
+                        , Attributes.class "introduction"
                         ]
-                        [ Html.text answer ]
-
-                answers =
-                    List.map showAnswer current.order
-                        |> List.map (\a -> Html.li [] [ a ])
-                        |> Html.ul []
-
-                solution =
-                    let
-                        explanation =
-                            Html.div
-                                [ Attributes.class "solution" ]
-                                [ Html.text "Correct answer: "
-                                , Html.text current.question.correct
-                                , current.question.solution
-                                    |> Maybe.withDefault ""
-                                    |> Html.paragraph
+                        [ Html.header
+                            []
+                            [ Html.text "Lights out" ]
+                        , quiz.introduction
+                            |> List.map Html.paragraph
+                            |> Html.section []
+                        , Html.div
+                            [ Attributes.class "actions" ]
+                            [ Html.button
+                                [ Attributes.class "start-button"
+                                , StartQuiz quizId |> Events.onClick
                                 ]
-                    in
-                    case current.answered of
+                                [ Html.text "Start" ]
+                            , viewHomeLink
+                            ]
+                        ]
+
+                Just state ->
+                    case List.getAt state.current quiz.questions of
                         Nothing ->
-                            Html.nothing
-
-                        Just answered ->
-                            Html.div
-                                [ Attributes.class "solution-container" ]
-                                [ case answered == current.question.correct of
-                                    True ->
-                                        Html.h3
-                                            [ Picnic.success ]
-                                            [ Html.text "Correct" ]
-
-                                    False ->
-                                        Html.h3
-                                            [ Picnic.error ]
-                                            [ Html.text "Incorrect" ]
-                                , explanation
-                                , next
+                            -- Then we must have reached the end of the quiz.
+                            let
+                                correct index doneQuestion =
+                                    Dict.get index state.answers == Just doneQuestion.correct
+                            in
+                            Html.article
+                                [ Attributes.class "card"
+                                , Attributes.class "final-results"
+                                ]
+                                [ Html.header
+                                    []
+                                    [ Html.text "Chequered flag" ]
+                                , Html.p
+                                    []
+                                    [ Html.text "You scored: "
+                                    , List.indexedMap correct quiz.questions
+                                        |> List.count identity
+                                        |> String.fromInt
+                                        |> Html.text
+                                    , Html.text " out of "
+                                    , List.length quiz.questions |> String.fromInt |> Html.text
+                                    ]
+                                , Html.div
+                                    [ Attributes.class "actions" ]
+                                    [ Html.button
+                                        [ Attributes.class "try-again-button"
+                                        , TryAgain quizId |> Events.onClick
+                                        ]
+                                        [ Html.text "Try again" ]
+                                    , viewHomeLink
+                                    ]
                                 ]
 
-                next =
-                    case current.answered of
-                        Nothing ->
-                            Html.nothing
+                        Just current ->
+                            let
+                                currentAnswer =
+                                    Dict.get state.current state.answers
 
-                        Just _ ->
-                            Html.button
-                                [ Attributes.class "next-button"
-                                , Events.onClick NextQuestion
+                                showAnswer answer =
+                                    let
+                                        correctClass =
+                                            case currentAnswer of
+                                                Nothing ->
+                                                    Attributes.class "possible"
+
+                                                Just answered ->
+                                                    case ( answered == answer, answer == current.correct ) of
+                                                        ( True, True ) ->
+                                                            Picnic.success
+
+                                                        ( False, False ) ->
+                                                            Attributes.class "correctly-left"
+
+                                                        ( False, True ) ->
+                                                            Attributes.class "incorrect-left"
+
+                                                        ( True, False ) ->
+                                                            Picnic.error
+
+                                        answeredClass =
+                                            case currentAnswer == Just answer of
+                                                False ->
+                                                    Attributes.class "not-selected"
+
+                                                True ->
+                                                    Attributes.class "selected"
+
+                                        messageAttribute =
+                                            case Maybe.isSomething currentAnswer of
+                                                False ->
+                                                    Answer quizId answer
+                                                        |> Events.onClick
+
+                                                True ->
+                                                    Attributes.class "not-in-use"
+                                    in
+                                    Html.button
+                                        [ Attributes.class "answer"
+                                        , correctClass
+                                        , messageAttribute
+                                        , answeredClass
+                                        ]
+                                        [ Html.text answer ]
+
+                                answers =
+                                    List.map showAnswer current.order
+                                        |> List.map (\a -> Html.li [] [ a ])
+                                        |> Html.ul []
+
+                                solution =
+                                    let
+                                        explanation =
+                                            Html.div
+                                                [ Attributes.class "solution" ]
+                                                [ Html.text "Correct answer: "
+                                                , Html.text current.correct
+                                                , current.solution
+                                                    |> Maybe.withDefault ""
+                                                    |> Html.paragraph
+                                                ]
+                                    in
+                                    case currentAnswer of
+                                        Nothing ->
+                                            Html.nothing
+
+                                        Just answered ->
+                                            Html.div
+                                                [ Attributes.class "solution-container" ]
+                                                [ case answered == current.correct of
+                                                    True ->
+                                                        Html.h3
+                                                            [ Picnic.success ]
+                                                            [ Html.text "Correct" ]
+
+                                                    False ->
+                                                        Html.h3
+                                                            [ Picnic.error ]
+                                                            [ Html.text "Incorrect" ]
+                                                , explanation
+                                                ]
+
+                                actions =
+                                    div
+                                        [ Attributes.class "actions" ]
+                                        [ case Maybe.isSomething currentAnswer of
+                                            True ->
+                                                next
+
+                                            False ->
+                                                Html.nothing
+                                        , giveUp
+                                        ]
+
+                                next =
+                                    Html.button
+                                        [ Attributes.class "next-button"
+                                        , NextQuestion quizId
+                                            |> Events.onClick
+                                        ]
+                                        [ Html.text "Next" ]
+
+                                giveUp =
+                                    Html.button
+                                        [ Attributes.class "giveup-button"
+                                        , Picnic.error
+                                        , GiveUp quizId
+                                            |> Events.onClick
+                                        ]
+                                        [ Html.text "Give up" ]
+
+                                currentQuestionNum =
+                                    1 + Dict.size state.answers
+
+                                totalNumQuestions =
+                                    currentQuestionNum + List.length quiz.questions
+                            in
+                            Html.article
+                                [ Attributes.class "quiz-question"
+                                , Attributes.class "card"
                                 ]
-                                [ Html.text "Next" ]
-
-                currentQuestionNum =
-                    1 + List.length model.quizState.done
-
-                totalNumQuestions =
-                    currentQuestionNum + List.length model.quizState.tocome
-            in
-            Html.article
-                [ Attributes.class "quiz-question"
-                , Attributes.class "card"
-                ]
-                [ Html.h3
-                    [ Attributes.class "question-title" ]
-                    [ Html.text current.question.title ]
-                    |> List.singleton
-                    |> Html.header []
-                , Html.paragraph current.question.description
-                , Html.div
-                    [ Attributes.class "answers" ]
-                    [ answers ]
-                , solution
-                , Html.footer
-                    []
-                    [ Html.text "Question "
-                    , currentQuestionNum |> String.fromInt |> Html.text
-                    , Html.text " of "
-                    , totalNumQuestions |> String.fromInt |> Html.text
-                    ]
-                ]
+                                [ Html.h3
+                                    [ Attributes.class "question-title" ]
+                                    [ Html.text current.title ]
+                                    |> List.singleton
+                                    |> Html.header []
+                                , Html.paragraph current.description
+                                , Html.div
+                                    [ Attributes.class "answers" ]
+                                    [ answers ]
+                                , solution
+                                , actions
+                                , Html.footer
+                                    []
+                                    [ Html.text "Question "
+                                    , currentQuestionNum |> String.fromInt |> Html.text
+                                    , Html.text " of "
+                                    , totalNumQuestions |> String.fromInt |> Html.text
+                                    ]
+                                ]
