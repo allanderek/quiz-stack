@@ -266,15 +266,81 @@ tracksQuiz =
     { name = "Race tracks"
     , id = "race-tracks"
     , introduction =
-        [ "I'm going to show you schematic diagrams of race tracks just name the track. Easy."
+        [ "I'm going to show you schematic diagrams of race tracks, featured in Formula 1. All you have to do is tell me the country that the track is in. Easy."
         ]
     , questions =
         [ { title = "Where is this track"
-          , image = Just "https://upload.wikimedia.org/wikipedia/commons/3/36/Monte_Carlo_Formula_1_track_map.svg"
-          , description = ""
+          , image = Just "/static/images/race-tracks/one.svg"
+          , description = "First one to start, the trophies here look like this."
           , correct = "Monaco"
-          , alternates = [ "Monza", "Montreal", "Paul Ricard" ]
-          , solution = Nothing
+          , alternates = [ "Italy", "Canada", "France" ]
+          , solution = Just "Yeah if you didn't get this one you're in trouble, I considered leaving in the tunnel, but it was already easy."
+          }
+        , { title = "Where is this track"
+          , image = Just "/static/images/race-tracks/british.svg"
+          , description = "Recent talk of running the track in reverse has lots of problems but would make interesting running."
+          , correct = "Britain"
+          , alternates = [ "Belgium", "Hungary", "Russia" ]
+          , solution = Just "Home track for a lot of the teams and the site of the first ever formula one race."
+          }
+        , { title = "Where is this track"
+          , image = Just "/static/images/race-tracks/belgium.svg"
+          , description = "A real power track, you need a good engine to get up that hill, but it's not without its downforce requirements too."
+          , correct = "Belgium"
+          , alternates = [ "Spain", "Canada", "Austria" ]
+          , solution = Just "Set at Spa, I hope it was a relaxing question for you."
+          }
+        , { title = "Where is this track"
+          , image = Just "/static/images/race-tracks/australia.svg"
+          , description = "The track does surround water, but will that be of help in identifying where it is?"
+          , correct = "Australia"
+          , alternates = [ "Canada", "Italy", "Spain" ]
+          , solution = Just "Albert park, Melbourne, Australia. Though admittedly you don't often see the water on TV."
+          }
+        , { title = "Where is this track"
+          , image = Just "/static/images/race-tracks/brazil.svg"
+          , description = "If you're having difficulty, just look at the length of that pit-lane."
+          , correct = "Brazil"
+          , alternates = [ "Japan", "China", "Abu Dhabi" ]
+          , solution = Just "If the pit lane didn't give it a way, the Senna S surely did."
+          }
+        , { title = "Where is this track"
+          , image = Just "/static/images/race-tracks/chinese.svg"
+          , description = "Two long straights often see teammates try to give each other a tow here in qualifying."
+          , correct = "China"
+          , alternates = [ "Russia", "Singapore", "France" ]
+          , solution = Just "I particularly like the first three corners here, make for interesting stuff at the start of the race."
+          }
+        , { title = "Where is this track"
+          , image = Just "/static/images/race-tracks/canadian.svg"
+          , description = "Again if you're struggling, the pit lane might help, particularly the entrance."
+          , correct = "Canada"
+          , alternates = [ "France", "Abu Dhabi", "Spain" ]
+          , solution = Just "Many a champion has wished he had gone straight into the pit lane, after an encounter with the wall of champions."
+          }
+
+        {-
+               , { title = "Where is this track"
+                 , image = Just "/static/images/race-tracks/azerbaijan.svg"
+                 , description = ""
+                 , correct = "Azerbaijan"
+                 , alternates = [ "Germany", "France", "South Korea" ]
+                 , solution = Nothing
+           }
+        -}
+        , { title = "Where is this track"
+          , image = Just "/static/images/race-tracks/usa.svg"
+          , description = "Check out the width of the track in some of those corners."
+          , correct = "USA"
+          , alternates = [ "Germany", "Japan", "Mexico" ]
+          , solution = Just "I like the curvy S bends at the start of this track, a bit like those at Suzuka."
+          }
+        , { title = "Where is this track"
+          , image = Just "/static/images/race-tracks/spanish.svg"
+          , description = "A very testing track for some of the drivers."
+          , correct = "Spain"
+          , alternates = [ "Mexico", "France", "Italy" ]
+          , solution = Just "Excuse the pun."
           }
         ]
     }
@@ -296,7 +362,7 @@ randomiseListElements randomiseElement initialSeed elements =
 setAnswersQuiz : Random.Seed -> QuizData a -> ( Random.Seed, Quiz )
 setAnswersQuiz initialSeed quizData =
     let
-        setAnswersQuestion question ( currentSeed, questions ) =
+        setAnswersQuestion currentSeed question =
             let
                 generator =
                     question.correct
@@ -315,11 +381,10 @@ setAnswersQuiz initialSeed quizData =
               , solution = question.solution
               , order = answers
               }
-                :: questions
             )
 
         ( newSeed, newQuestions ) =
-            List.foldr setAnswersQuestion ( initialSeed, [] ) quizData.questions
+            randomiseListElements setAnswersQuestion initialSeed quizData.questions
     in
     ( newSeed
     , { name = quizData.name
@@ -435,7 +500,7 @@ update msg model =
 
 view : Model -> Browser.Document Msg
 view model =
-    { title = "Title"
+    { title = "Pole Prediction Quiz Time"
     , body =
         case model.route of
             Route.Home ->
@@ -459,7 +524,7 @@ viewHome model =
                 ]
                 [ quiz.name |> Html.text ]
 
-        content =
+        quizList =
             List.map showQuizLink model.quizzes
                 |> List.map (List.singleton >> Html.li [])
                 |> Html.ol []
@@ -468,7 +533,15 @@ viewHome model =
         [ Attributes.class "card"
         , Attributes.class "quiz-list"
         ]
-        [ content ]
+        [ Html.header
+            []
+            [ Html.text "Pole prediction quiz time" ]
+        , Html.paragraph
+            "Welcome to pole-prediction's quiz time, test yourself against, well just you really."
+        , quizList
+        , Html.paragraph
+            "Quizzes will be updated whenever I feel like it, which may well be never."
+        ]
 
 
 viewHomeLink : Html msg
@@ -664,10 +737,10 @@ viewQuiz model quizId =
                                         [ Html.text "Give up" ]
 
                                 currentQuestionNum =
-                                    1 + Dict.size state.answers
+                                    state.current + 1
 
                                 totalNumQuestions =
-                                    currentQuestionNum + List.length quiz.questions
+                                    List.length quiz.questions
                             in
                             Html.article
                                 [ Attributes.class "quiz-question"
