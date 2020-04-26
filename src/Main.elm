@@ -277,42 +277,42 @@ tracksQuiz =
           , solution = Just "Yeah if you didn't get this one you're in trouble, I considered leaving in the tunnel, but it was already easy."
           }
         , { title = "Where is this track"
-          , image = Just "/static/images/race-tracks/british.svg"
+          , image = Just "/static/images/race-tracks/two.svg"
           , description = "Recent talk of running the track in reverse has lots of problems but would make interesting running."
           , correct = "Britain"
           , alternates = [ "Belgium", "Hungary", "Russia" ]
           , solution = Just "Home track for a lot of the teams and the site of the first ever formula one race."
           }
         , { title = "Where is this track"
-          , image = Just "/static/images/race-tracks/belgium.svg"
+          , image = Just "/static/images/race-tracks/three.svg"
           , description = "A real power track, you need a good engine to get up that hill, but it's not without its downforce requirements too."
           , correct = "Belgium"
           , alternates = [ "Spain", "Canada", "Austria" ]
           , solution = Just "Set at Spa, I hope it was a relaxing question for you."
           }
         , { title = "Where is this track"
-          , image = Just "/static/images/race-tracks/australia.svg"
+          , image = Just "/static/images/race-tracks/four.svg"
           , description = "The track does surround water, but will that be of help in identifying where it is?"
           , correct = "Australia"
           , alternates = [ "Canada", "Italy", "Spain" ]
           , solution = Just "Albert park, Melbourne, Australia. Though admittedly you don't often see the water on TV."
           }
         , { title = "Where is this track"
-          , image = Just "/static/images/race-tracks/brazil.svg"
+          , image = Just "/static/images/race-tracks/five.svg"
           , description = "If you're having difficulty, just look at the length of that pit-lane."
           , correct = "Brazil"
           , alternates = [ "Japan", "China", "Abu Dhabi" ]
           , solution = Just "If the pit lane didn't give it a way, the Senna S surely did."
           }
         , { title = "Where is this track"
-          , image = Just "/static/images/race-tracks/chinese.svg"
+          , image = Just "/static/images/race-tracks/six.svg"
           , description = "Two long straights often see teammates try to give each other a tow here in qualifying."
           , correct = "China"
           , alternates = [ "Russia", "Singapore", "France" ]
           , solution = Just "I particularly like the first three corners here, make for interesting stuff at the start of the race."
           }
         , { title = "Where is this track"
-          , image = Just "/static/images/race-tracks/canadian.svg"
+          , image = Just "/static/images/race-tracks/seven.svg"
           , description = "Again if you're struggling, the pit lane might help, particularly the entrance."
           , correct = "Canada"
           , alternates = [ "France", "Abu Dhabi", "Spain" ]
@@ -329,14 +329,14 @@ tracksQuiz =
            }
         -}
         , { title = "Where is this track"
-          , image = Just "/static/images/race-tracks/usa.svg"
+          , image = Just "/static/images/race-tracks/eight.svg"
           , description = "Check out the width of the track in some of those corners."
           , correct = "USA"
           , alternates = [ "Germany", "Japan", "Mexico" ]
           , solution = Just "I like the curvy S bends at the start of this track, a bit like those at Suzuka."
           }
         , { title = "Where is this track"
-          , image = Just "/static/images/race-tracks/spanish.svg"
+          , image = Just "/static/images/race-tracks/nine.svg"
           , description = "A very testing track for some of the drivers."
           , correct = "Spain"
           , alternates = [ "Mexico", "France", "Italy" ]
